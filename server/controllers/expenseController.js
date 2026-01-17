@@ -1,10 +1,11 @@
+const asyncHandler = require('express-async-handler');
 const Expense = require('../models/Expense');
 const xlsx = require('xlsx');
 
 // @desc    Add new expense
 // @route   POST /expense/add
 // @access  Private
-const addExpense = async (req, res) => {
+const addExpense = asyncHandler(async (req, res) => {
     const { title, amount, category, date } = req.body;
 
     if (!title || !amount || !category) {
@@ -21,20 +22,43 @@ const addExpense = async (req, res) => {
     });
 
     res.status(201).json(expense);
-};
+});
 
-// @desc    Get all expenses
+// @desc    Get all expenses with pagination and filtering
 // @route   GET /expense/all
 // @access  Private
-const getExpenses = async (req, res) => {
-    const expenses = await Expense.find({ user: req.user.id }).sort({ date: -1 });
-    res.status(200).json(expenses);
-};
+const getExpenses = asyncHandler(async (req, res) => {
+    const { page = 1, limit = 10, startDate, endDate } = req.query;
+
+    const query = { user: req.user.id };
+
+    // Date Filtering
+    if (startDate || endDate) {
+        query.date = {};
+        if (startDate) query.date.$gte = new Date(startDate);
+        if (endDate) query.date.$lte = new Date(endDate);
+    }
+
+    const count = await Expense.countDocuments(query);
+
+    const expenses = await Expense.find(query)
+        .sort({ date: -1 })
+        .limit(limit * 1)
+        .skip((page - 1) * limit)
+        .exec();
+
+    res.status(200).json({
+        expenses,
+        totalPages: Math.ceil(count / limit),
+        currentPage: Number(page),
+        totalExpenses: count
+    });
+});
 
 // @desc    Delete expense
 // @route   DELETE /expense/:id
 // @access  Private
-const deleteExpense = async (req, res) => {
+const deleteExpense = asyncHandler(async (req, res) => {
     const expense = await Expense.findById(req.params.id);
 
     if (!expense) {
@@ -57,12 +81,12 @@ const deleteExpense = async (req, res) => {
     await expense.deleteOne();
 
     res.status(200).json({ id: req.params.id });
-};
+});
 
 // @desc    Export expenses to Excel
 // @route   GET /expense/export
 // @access  Private
-const exportExpenses = async (req, res) => {
+const exportExpenses = asyncHandler(async (req, res) => {
     const expenses = await Expense.find({ user: req.user.id }).sort({ date: -1 });
 
     const data = expenses.map(expense => ({
@@ -81,7 +105,7 @@ const exportExpenses = async (req, res) => {
     res.setHeader('Content-Disposition', 'attachment; filename="expenses.xlsx"');
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.send(buf);
-};
+});
 
 module.exports = {
     addExpense,

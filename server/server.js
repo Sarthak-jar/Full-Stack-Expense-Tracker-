@@ -24,14 +24,15 @@ app.get('/', (req, res) => {
 });
 
 // Error Handler Middleware
-app.use((err, req, res, next) => {
-    const statusCode = res.statusCode ? res.statusCode : 500;
-    res.status(statusCode);
-    res.json({
-        message: err.message,
-        stack: process.env.NODE_ENV === 'production' ? null : err.stack
-    });
-});
+const { errorHandler } = require('./middlewares/errorMiddleware');
+
+// Validate Env Vars
+if (!process.env.PORT || !process.env.MONGO_URI || !process.env.JWT_SECRET) {
+    console.error('ERROR: Missing required environment variables (PORT, MONGO_URI, JWT_SECRET).');
+    process.exit(1);
+}
+
+app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
 

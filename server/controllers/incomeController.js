@@ -1,10 +1,11 @@
+const asyncHandler = require('express-async-handler');
 const Income = require('../models/Income');
 const xlsx = require('xlsx');
 
 // @desc    Add new income
 // @route   POST /income/add
 // @access  Private
-const addIncome = async (req, res) => {
+const addIncome = asyncHandler(async (req, res) => {
     const { title, amount, category, date } = req.body;
 
     if (!title || !amount || !category) {
@@ -21,20 +22,43 @@ const addIncome = async (req, res) => {
     });
 
     res.status(201).json(income);
-};
+});
 
-// @desc    Get all incomes
+// @desc    Get all incomes with pagination and filtering
 // @route   GET /income/all
 // @access  Private
-const getIncomes = async (req, res) => {
-    const incomes = await Income.find({ user: req.user.id }).sort({ date: -1 });
-    res.status(200).json(incomes);
-};
+const getIncomes = asyncHandler(async (req, res) => {
+    const { page = 1, limit = 10, startDate, endDate } = req.query;
+
+    const query = { user: req.user.id };
+
+    // Date Filtering
+    if (startDate || endDate) {
+        query.date = {};
+        if (startDate) query.date.$gte = new Date(startDate);
+        if (endDate) query.date.$lte = new Date(endDate);
+    }
+
+    const count = await Income.countDocuments(query);
+
+    const incomes = await Income.find(query)
+        .sort({ date: -1 })
+        .limit(limit * 1)
+        .skip((page - 1) * limit)
+        .exec();
+
+    res.status(200).json({
+        incomes,
+        totalPages: Math.ceil(count / limit),
+        currentPage: Number(page),
+        totalIncomes: count
+    });
+});
 
 // @desc    Delete income
 // @route   DELETE /income/:id
 // @access  Private
-const deleteIncome = async (req, res) => {
+const deleteIncome = asyncHandler(async (req, res) => {
     const income = await Income.findById(req.params.id);
 
     if (!income) {
@@ -57,12 +81,12 @@ const deleteIncome = async (req, res) => {
     await income.deleteOne();
 
     res.status(200).json({ id: req.params.id });
-};
+});
 
 // @desc    Export incomes to Excel
 // @route   GET /income/export
 // @access  Private
-const exportIncomes = async (req, res) => {
+const exportIncomes = asyncHandler(async (req, res) => {
     const incomes = await Income.find({ user: req.user.id }).sort({ date: -1 });
 
     const data = incomes.map(income => ({
@@ -81,7 +105,7 @@ const exportIncomes = async (req, res) => {
     res.setHeader('Content-Disposition', 'attachment; filename="incomes.xlsx"');
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.send(buf);
-};
+});
 
 module.exports = {
     addIncome,
